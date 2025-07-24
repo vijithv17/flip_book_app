@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Image Flipbook</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for the flipbook effect */
+        body {
+            font-family: "Inter", sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            user-select: none; /* Prevent text selection during drag */
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+        }
+
+        .flipbook-container {
+            position: relative;
+            width: 90%; /* Responsive width */
+            max-width: 500px; /* Max width for single page view */
+            height: auto; /* Height will adjust based on content */
+            aspect-ratio: 3/4; /* Maintain aspect ratio for a single page */
+            perspective: 1500px; /* For 3D effect */
+            margin-bottom: 20px;
+            overflow: hidden; /* Hide overflow from pages during transition */
+        }
+
+        .book {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.8s ease-in-out; /* Smooth transition for page flips */
+        }
+
+        .page {
+            position: absolute;
+            width: 100%; /* Always full width of container for single page */
+            height: 100%;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 8px; /* Rounded corners for the page */
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            backface-visibility: hidden; /* Hide back of the page during flip */
+            transition: transform 0.8s ease-in-out, opacity 0.8s ease-in-out, z-index 0s 0.4s;
+            transform-origin: center; /* Flip from center */
+        }
+
+        .page.active {
+            z-index: 10;
+            opacity: 1;
+            transform: rotateY(0deg);
+        }
+
+        .page.prev {
+            z-index: 5;
+            opacity: 0; /* Hide previous page */
+            transform: rotateY(180deg); /* Fully flipped */
+        }
+
+        .page.next {
+            z-index: 5;
+            opacity: 0; /* Hide next page */
+            transform: rotateY(-180deg); /* Fully flipped */
+        }
+
+        .page img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain; /* Ensure image fits without cropping */
+            display: block;
+        }
+
+        .page-content {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            padding: 10px;
+            box-sizing: border-box;
+            text-align: center;
+            color: #333;
+            position: relative; /* For trivia tab positioning */
+        }
+
+        .page-content p {
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+
+        /* Enhanced Trivia Tab & Describe Button */
+        .llm-button {
+            position: absolute;
+            top: 15px; /* Distance from top */
+            background: linear-gradient(135deg, #6366f1, #4f46e5); /* Gradient background */
+            color: white;
+            padding: 10px 18px; /* Increased padding */
+            border-radius: 9999px; /* Pill shape */
+            font-size: 0.9em; /* Slightly larger font */
+            font-weight: 600; /* Semi-bold */
+            cursor: pointer;
+            transition: all 0.3s ease; /* Smooth transitions for all properties */
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); /* More prominent shadow */
+            z-index: 15; /* Above page content */
+            display: flex; /* For icon and text alignment */
+            align-items: center;
+            gap: 8px; /* Space between icon and text */
+            border: 1px solid rgba(255, 255, 255, 0.3); /* Subtle white border */
+        }
+
+        .llm-button:hover {
+            background: linear-gradient(135deg, #4f46e5, #4338ca); /* Darker gradient on hover */
+            transform: translateY(-2px) scale(1.02); /* Lift and slightly enlarge */
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3); /* Deeper shadow on hover */
+        }
+
+        .llm-button:active {
+            transform: translateY(0) scale(0.98); /* Press down effect */
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); /* Flatter shadow on active */
+        }
+
+        /* Specific positioning for Trivia and Describe buttons */
+        .trivia-tab {
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .describe-button {
+            top: 70px; /* Position below trivia tab */
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #10b981, #059669); /* Different gradient for distinction */
+        }
+
+        .describe-button:hover {
+            background: linear-gradient(135deg, #059669, #047857);
+        }
+
+        /* Icon SVG Styling */
+        .llm-button svg {
+            width: 18px; /* Adjust icon size */
+            height: 18px;
+            fill: currentColor; /* Inherit color from parent */
+        }
+
+        /* Navigation Arrows - Integrated */
+        .nav-arrow {
+            position: absolute;
+            top: 0; /* Align with page top */
+            bottom: 0; /* Align with page bottom */
+            width: 25%; /* Take up a quarter of the page width */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(to right, rgba(0,0,0,0.0), rgba(0,0,0,0.1)); /* Subtle gradient for prev */
+            color: white;
+            border: none;
+            font-size: 3em; /* Larger arrow */
+            cursor: pointer;
+            z-index: 20; /* Above pages */
+            transition: background-color 0.3s ease, opacity 0.3s ease;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4); /* Text shadow for arrow visibility */
+        }
+
+        .nav-arrow:hover {
+            background: linear-gradient(to right, rgba(0,0,0,0.0), rgba(0,0,0,0.2)); /* Darker gradient on hover */
+        }
+
+        .nav-arrow:disabled {
+            opacity: 0.2; /* More transparent when disabled */
+            cursor: not-allowed;
+            background: none; /* No background when disabled */
+            text-shadow: none;
+        }
+
+        #prevArrow {
+            left: 0;
+            border-top-left-radius: 8px;
+            border-bottom-left-radius: 8px;
+            background: linear-gradient(to left, rgba(0,0,0,0.0), rgba(0,0,0,0.1)); /* Gradient for next */
+        }
+
+        #prevArrow:hover {
+            background: linear-gradient(to left, rgba(0,0,0,0.0), rgba(0,0,0,0.2));
+        }
+
+        #nextArrow {
+            right: 0;
+            border-top-right-radius: 8px;
+            border-bottom-right-radius: 8px;
+        }
+
+
+        /* Modal for Trivia */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+
+        .modal.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal-content {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+            position: relative;
+            animation: fadeInScale 0.3s ease-out;
+        }
+
+        .modal-close-btn {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            color: #6b7280; /* Gray 500 */
+            transition: color 0.2s ease;
+        }
+
+        .modal-close-btn:hover {
+            color: #374151; /* Gray 700 */
+        }
+
+        .modal-content h3 {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .modal-content p {
+            font-size: 1.1em;
+            color: #555;
+            line-height: 1.6;
+        }
+
+        .modal-content .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #4f46e5;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto 0;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeInScale {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .message-box {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #4f46e5;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+
+        .message-box.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Responsive adjustments for arrows */
+        @media (max-width: 768px) {
+            .nav-arrow {
+                font-size: 2.5em; /* Slightly smaller on mobile */
+                width: 35%; /* Take more width on mobile */
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="flipbook-container" id="flipbookContainer">
+        <div class="book" id="book">
+            <!-- Pages will be dynamically added here by JavaScript -->
+        </div>
+        <!-- Arrows are now inside the container, covering the edges of the page -->
+        <button id="prevArrow" class="nav-arrow">&#10094;</button> <!-- Left arrow -->
+        <button id="nextArrow" class="nav-arrow">&#10095;</button> <!-- Right arrow -->
+    </div>
+
+    <!-- The image input section is removed as images are now pre-defined -->
+    <!-- <div class="image-input-section">
+        <h2 class="text-xl font-semibold text-gray-800 mb-3">Add New Image</h2>
+        <input type="text" id="imageUrlInput" placeholder="Enter image URL (e.g., https://placehold.co/600x400/FF0000/FFFFFF?text=Hello)">
+        <button id="addImageBtn">Add Image to Flipbook</button>
+    </div> -->
+
+    <div id="messageBox" class="message-box"></div>
+
+    <!-- Trivia Modal (reused for description) -->
+    <div id="triviaModal" class="modal">
+        <div class="modal-content">
+            <button class="modal-close-btn" id="closeTriviaModal">&times;</button>
+            <h3 id="modalTitle">Image Info</h3>
+            <div id="modalBody">
+                <div class="loading-spinner"></div>
+                <p class="mt-4 text-gray-600">Loading...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Array to hold image URLs - PRE-POPULATED FOR HOSTING
+        // REPLACE THESE WITH YOUR OWN IMAGE URLs!
+        let images = [
+            "images/image1.jpg",
+            "images/image2.jpg",
+	    "images/image3.jpeg",
+            "images/image4.jpg",
+	    "images/image5.png",
+            "images/image6.jpeg",
+	    "images/image7.jpg",
+            "images/image8.jpg",
+	    "images/image9.jpg",
+        ];
+        // You can add more image URLs here:
+        // "https://example.com/your-image-7.jpg",
+        // "https://example.com/your-image-8.png"
+
+
+        let currentPage = 0; // Current page index (0-based)
+        const book = document.getElementById('book');
+        const flipbookContainer = document.getElementById('flipbookContainer');
+        // Removed imageUrlInput and addImageBtn as they are no longer needed
+        const messageBox = document.getElementById('messageBox');
+        const prevArrow = document.getElementById('prevArrow');
+        const nextArrow = document.getElementById('nextArrow');
+        const infoModal = document.getElementById('triviaModal'); // Renamed for broader use
+        const modalTitle = document.getElementById('modalTitle');
+        const modalBody = document.getElementById('modalBody');
+        const closeModalBtn = document.getElementById('closeTriviaModal'); // Renamed for broader use
+
+        // Function to show a message box (still useful for general feedback)
+        function showMessageBox(message, type = 'info') {
+            messageBox.textContent = message;
+            messageBox.className = 'message-box show'; // Reset classes and show
+            if (type === 'error') {
+                messageBox.style.backgroundColor = '#dc2626'; // Red for error
+            } else {
+                messageBox.style.backgroundColor = '#4f46e5'; // Default indigo
+            }
+            setTimeout(() => {
+                messageBox.classList.remove('show');
+            }, 3000); // Hide after 3 seconds
+        }
+
+        // Load images function simplified: now directly uses the pre-defined array
+        function loadImages() {
+            // No longer loading from localStorage or checking for stored images
+            // The 'images' array is already defined above with your desired images.
+            renderFlipbook();
+        }
+
+        // Save images function removed as images are no longer dynamically added/saved
+        // function saveImages() {
+        //     localStorage.setItem('flipbookImages', JSON.stringify(images));
+        // }
+
+        // Function to render the flipbook pages
+        function renderFlipbook(direction = 0) { // direction: 0 (initial), 1 (next), -1 (prev)
+            book.innerHTML = ''; // Clear existing pages
+
+            if (images.length === 0) {
+                const noImagePage = document.createElement('div');
+                noImagePage.className = `page active rounded-lg`;
+                noImagePage.innerHTML = `<div class="page-content"><p class="text-gray-500">No images yet. Please add images to the 'images' array in the script!</p></div>`;
+                book.appendChild(noImagePage);
+                updateNavigationArrows();
+                return;
+            }
+
+            // Create the current page
+            const currentPageElement = createPageElement(images[currentPage], currentPage + 1);
+            currentPageElement.classList.add('active'); // Mark as active
+            book.appendChild(currentPageElement);
+
+            // Add trivia tab listener
+            const triviaTab = currentPageElement.querySelector('.trivia-tab');
+            if (triviaTab) {
+                triviaTab.addEventListener('click', () => showLLMModal('trivia', images[currentPage]));
+            }
+
+            // Add describe button listener
+            const describeButton = currentPageElement.querySelector('.describe-button');
+            if (describeButton) {
+                describeButton.addEventListener('click', () => showLLMModal('describe', images[currentPage]));
+            }
+
+            // Apply flip animation based on direction
+            if (direction === 1) { // Next page
+                currentPageElement.style.transform = 'rotateY(180deg)'; // Start rotated
+                setTimeout(() => {
+                    currentPageElement.style.transform = 'rotateY(0deg)'; // Flip to front
+                }, 50); // Small delay to ensure initial state is applied
+            } else if (direction === -1) { // Previous page
+                currentPageElement.style.transform = 'rotateY(-180deg)'; // Start rotated
+                setTimeout(() => {
+                    currentPageElement.style.transform = 'rotateY(0deg)'; // Flip to front
+                }, 50);
+            }
+
+            updateNavigationArrows();
+        }
+
+        // Helper function to create a page element
+        function createPageElement(imageUrl, pageNumber) {
+            const page = document.createElement('div');
+            page.className = `page rounded-lg`; // Always full width and rounded
+            page.innerHTML = `
+                <div class="page-content">
+                    <img src="${imageUrl}" alt="Page ${pageNumber}" onerror="this.src='https://placehold.co/600x400/CCCCCC/666666?text=Image+Load+Error';">
+                    <p class="text-gray-600 text-sm mt-2">Page ${pageNumber}</p>
+                    <div class="llm-button trivia-tab">
+                        <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                        </svg>
+                        <span>Trivia</span>
+                    </div>
+                    <div class="llm-button describe-button">
+                        <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                        </svg>
+                        <span>✨ Describe Image</span>
+                    </div>
+                </div>
+            `;
+            return page;
+        }
+
+        // --- Navigation with Arrows ---
+        function updateNavigationArrows() {
+            prevArrow.disabled = currentPage === 0;
+            nextArrow.disabled = currentPage >= images.length - 1;
+            if (images.length === 0) {
+                prevArrow.disabled = true;
+                nextArrow.disabled = true;
+            }
+        }
+
+        nextArrow.addEventListener('click', () => {
+            if (currentPage < images.length - 1) {
+                currentPage++;
+                renderFlipbook(1); // Pass direction for animation
+            }
+        });
+
+        prevArrow.addEventListener('click', () => {
+            if (currentPage > 0) {
+                currentPage--;
+                renderFlipbook(-1); // Pass direction for animation
+            }
+        });
+
+        // --- LLM Modal Logic (Unified for Trivia and Describe) ---
+        async function showLLMModal(type, imageUrl) {
+            infoModal.classList.add('show');
+            modalBody.innerHTML = `
+                <div class="loading-spinner"></div>
+                <p class="mt-4 text-gray-600">Loading...</p>
+            `;
+
+            let prompt = '';
+            if (type === 'trivia') {
+                modalTitle.textContent = "Image Trivia";
+                prompt = `Generate a fun and interesting trivia fact about the image at this URL: ${imageUrl}. Keep it concise and engaging. If the image is a placeholder or generic, provide a general fun fact about images or art.`;
+            } else if (type === 'describe') {
+                modalTitle.textContent = "Image Description";
+                prompt = `Generate a concise and creative description for the image at this URL: ${imageUrl}. Focus on key elements, mood, or a short caption.`;
+            }
+
+            try {
+                let chatHistory = [];
+                chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+                const payload = { contents: chatHistory };
+                const apiKey = ""; // Canvas will provide this in runtime
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const text = result.candidates[0].content.parts[0].text;
+                    modalBody.innerHTML = `<p>${text}</p>`;
+                } else {
+                    modalBody.innerHTML = `<p class="text-red-500">Could not generate ${type}. Please try again.</p>`;
+                }
+            } catch (error) {
+                console.error(`Error fetching ${type}:`, error);
+                modalBody.innerHTML = `<p class="text-red-500">Failed to load ${type}. Network error or API issue.</p>`;
+            }
+        }
+
+        closeModalBtn.addEventListener('click', () => {
+            infoModal.classList.remove('show');
+        });
+
+        // Close modal if clicked outside content
+        infoModal.addEventListener('click', (e) => {
+            if (e.target === infoModal) {
+                infoModal.classList.remove('show');
+            }
+        });
+
+        // Removed addImageBtn functionality as images are now pre-defined
+        // addImageBtn.addEventListener('click', () => {
+        //     const url = imageUrlInput.value.trim();
+        //     if (url) {
+        //         images.push(url);
+        //         saveImages();
+        //         imageUrlInput.value = ''; // Clear input
+        //         // Jump to the newly added image
+        //         currentPage = images.length - 1;
+        //         renderFlipbook();
+        //         showMessageBox('Image added successfully!');
+        //     } else {
+        //         showMessageBox('Please enter a valid image URL.', 'error');
+        //     }
+        // });
+
+        // Handle window resize to adjust flipbook display (though it's always single page now)
+        window.addEventListener('resize', () => {
+            renderFlipbook(); // Still good to re-render in case of layout changes
+        });
+
+        // Initial load
+        window.onload = function() {
+            loadImages();
+        };
+
+    </script>
+</body>
+</html>
